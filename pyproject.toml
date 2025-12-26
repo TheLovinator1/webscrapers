@@ -5,16 +5,10 @@ description = "robots.txt are for pussies"
 readme = "README.md"
 authors = [{ name = "Joakim Hellsén", email = "tlovinator@gmail.com" }]
 requires-python = ">=3.14"
-dependencies = [
-    "asyncio",
-    "loguru>=0.7.3",
-    "pydantic",
-    "rnet",
-    "selectolax",
-]
+dependencies = ["asyncio", "loguru", "pydantic", "rnet", "selectolax"]
 
 [dependency-groups]
-dev = ["pytest"]
+dev = ["pytest", "pytest-asyncio"]
 
 [build-system]
 requires = ["uv_build>=0.9.17,<0.10.0"]
@@ -63,3 +57,6 @@ force-single-line = true
 [tool.djlint]
 # Exclude large HTML fixture file from linting/formatting runs
 exclude = "tests/reddit_post_example.html"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

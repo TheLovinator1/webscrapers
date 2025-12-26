@@ -5,7 +5,7 @@ from rnet import Impersonate
 from rnet import Response
 
 
-async def download_page(url: str) -> str:
+async def download_page(url: str) -> Response:
     """Download the content of a web page given its URL.
 
     Args:
@@ -15,7 +15,7 @@ async def download_page(url: str) -> str:
         RuntimeError: If no response is received after following redirects.
 
     Returns:
-        str: The content of the web page.
+        The response
     """
     client = Client(impersonate=Impersonate.Chrome137)
     max_redirects = 5
@@ -41,11 +41,11 @@ async def download_page(url: str) -> str:
             else:
                 url = location_str
             continue
-        return await resp.text()
+        return resp
 
     # If too many redirects or no valid response, return last response text
     if resp is not None:
-        return await resp.text()
+        return resp
 
     msg = "No response received from client.get()"
     raise RuntimeError(msg)

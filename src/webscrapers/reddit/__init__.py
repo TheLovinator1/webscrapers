@@ -9,6 +9,8 @@ from urllib.parse import ParseResult
 from urllib.parse import urlparse
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
+from rnet import Response  # noqa: TC002
 from selectolax.parser import HTMLParser
 from selectolax.parser import Node
 
@@ -16,6 +18,7 @@ from webscrapers import download_page
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -60,8 +63,10 @@ class RedditUrlInfo(BaseModel):
         comment_id: The comment ID if applicable.
     """
 
-    class Config:
-        frozen = True  # frozen, preventing attribute modification
+    model_config = ConfigDict(frozen=True)
+    """Whether models are faux-immutable, i.e. whether `__setattr__` is allowed,
+     a `__hash__()` method for the model. This makes instances of the model
+     potentially hashable if all the attributes are hashable."""
 
     kind: RedditKind
     """The type of Reddit URL (e.g., 'post', 'comment', 'user', etc.)."""
@@ -108,8 +113,16 @@ class RedditPostData(BaseModel):
         comments: Tuple of RedditCommentData.
     """
 
-    class Config:
-        frozen = True
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+    """
+    Frozen:
+        Whether models are faux-immutable, i.e. whether `__setattr__` is allowed,
+        a `__hash__()` method for the model. This makes instances of the model
+        potentially hashable if all the attributes are hashable.
+
+     arbitrary_types_allowed:
+        Whether arbitrary types are allowed for field types
+     """
 
     post_id: str | None = None
     title: str | None = None
@@ -126,6 +139,9 @@ class RedditPostData(BaseModel):
     domain: str | None = None
     flair: str | None = None
     comments: tuple[RedditCommentData, ...] = ()
+
+    response: Response
+    """A response from a request."""
 
 
 class RedditCommentData(BaseModel):
@@ -156,8 +172,10 @@ class RedditCommentData(BaseModel):
             Use build_comment_tree() for trees.
     """
 
-    class Config:
-        frozen = True
+    model_config = ConfigDict(frozen=True)
+    """Whether models are faux-immutable, i.e. whether `__setattr__` is allowed,
+     a `__hash__()` method for the model. This makes instances of the model
+     potentially hashable if all the attributes are hashable."""
 
     comment_id: str | None = None
     """Unique Reddit comment ID (e.g., 'a1b2c3d')."""
@@ -796,11 +814,11 @@ def _get_direct_comment_children(container: Node) -> list[Node]:
     return children
 
 
-def parse_reddit_post_html(the_page: str) -> RedditPostData:
+async def parse_reddit_post_html(response: Response) -> RedditPostData:
     """Parse Reddit post HTML and extract post metadata and comments.
 
     Args:
-        the_page: Raw HTML content of a Reddit post page from old.reddit.com.
+        response: The response from Reddit.
 
     Returns:
         RedditPostData containing extracted post information and comments.
@@ -808,6 +826,7 @@ def parse_reddit_post_html(the_page: str) -> RedditPostData:
     Raises:
         RedditScraperError: If the HTML cannot be parsed or required data is missing.
     """
+    the_page: str = await response.text()
     parser = HTMLParser(the_page)
 
     # Try original selector
@@ -863,6 +882,7 @@ def parse_reddit_post_html(the_page: str) -> RedditPostData:
         domain=ctx.domain,
         flair=ctx.flair,
         comments=tuple(comments),
+        response=response,
     )
 
 
@@ -893,10 +913,12 @@ async def scrape_post(
         post_id = extract_post_id_from_url(post_url)
 
     # Download the HTML content of the post page
-    the_page: str = await download_page(f"https://old.reddit.com/comments/{post_id}/")
+    response: Response = await download_page(
+        f"https://old.reddit.com/comments/{post_id}/",
+    )
 
     # Parse the HTML content to extract post details
-    return parse_reddit_post_html(the_page)
+    return await parse_reddit_post_html(response=response)
 
 
 def extract_post_id_from_url(post_url: str | None) -> str | None:
