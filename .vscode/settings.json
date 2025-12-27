@@ -12,6 +12,8 @@
         "isort",
         "Joakim",
         "linkflairlabel",
+        "loguru",
+        "markdownify",
         "morechildren",
         "nestedlisting",
         "pydantic",

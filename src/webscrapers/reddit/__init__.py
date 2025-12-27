@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
+from pydantic import Field
 from rnet import Response  # noqa: TC002
 from selectolax.parser import HTMLParser
 from selectolax.parser import Node
@@ -140,7 +141,7 @@ class RedditPostData(BaseModel):
     flair: str | None = None
     comments: tuple[RedditCommentData, ...] = ()
 
-    response: Response
+    response: Response = Field(exclude=True)
     """A response from a request."""
 
 
@@ -157,7 +158,6 @@ class RedditCommentData(BaseModel):
         author: Username of the comment author.
         date_posted: Timestamp when the comment was posted.
         content_html: Raw HTML content of the comment.
-        content_markdown: Markdown-formatted content of the comment.
         content_text: Plain text version of the comment (no HTML/Markdown).
         score: Current vote score (upvotes - downvotes).
         edited: False if not edited, datetime if edited (contains edit timestamp).
@@ -194,9 +194,6 @@ class RedditCommentData(BaseModel):
 
     content_html: str | None = None
     """Raw HTML content of the comment."""
-
-    content_markdown: str | None = None
-    """Markdown-formatted content of the comment."""
 
     content_text: str | None = None
     """Plain text version of the comment (no HTML/Markdown)."""
@@ -529,59 +526,6 @@ def _extract_comment_author(entry: Node, *, is_deleted: bool) -> str | None:
     return None
 
 
-def _extract_comment_content(entry: Node) -> tuple[str | None, str | None, bool, bool]:
-    """Extract content from a comment entry node.
-
-    Args:
-        entry: The entry div of the comment.
-
-    Returns:
-        Tuple of (content_html, content_text, is_deleted, is_removed).
-    """
-    content_div: Node | None = entry.css_first("div.usertext-body div.md")
-    if not content_div:
-        return None, None, False, False
-
-    content_html: str | None = content_div.html
-    content_text: str = content_div.text(strip=True)
-
-    is_removed: bool = content_text == "[removed]"
-    is_deleted: bool = content_text == "[deleted]"
-
-    return content_html, content_text, is_deleted, is_removed
-
-
-def _extract_comment_metadata(
-    node: Node,
-    entry: Node,
-) -> tuple[str | None, str | None, bool]:
-    """Extract metadata from a comment node.
-
-    Args:
-        node: The thing.comment node.
-        entry: The entry div of the comment.
-
-    Returns:
-        Tuple of (distinguished, permalink, stickied).
-    """
-    node_class: str = node.attributes.get("class") or ""
-
-    distinguished: str | None = None
-    if "moderator" in node_class:
-        distinguished = "moderator"
-    elif "admin" in node_class:
-        distinguished = "admin"
-
-    stickied: bool = "stickied" in node_class
-
-    permalink_elem: Node | None = entry.css_first("a[data-event-action='permalink']")
-    permalink: str | None = (
-        permalink_elem.attributes.get("href") if permalink_elem else None
-    )
-
-    return distinguished, permalink, stickied
-
-
 def _extract_parent_id(entry: Node) -> str | None:
     """Extract parent comment ID from a comment entry.
 
@@ -621,12 +565,33 @@ def _build_comment_context(node: Node) -> _CommentParseContext | None:
     if not entry:
         return None
 
-    content_html, content_text, content_deleted, is_removed = _extract_comment_content(
-        entry,
-    )
-    is_deleted: bool = is_deleted_class or content_deleted
+    content_div: Node | None = entry.css_first("div.usertext-body div.md")
+    if not content_div:
+        return None
+
+    content_html: str | None = content_div.html
+    content_text: str = content_div.text(strip=True)
+
+    is_removed: bool = content_text == "[removed]"
+    is_deleted: bool = content_text == "[deleted]"
+    is_deleted: bool = is_deleted_class or is_deleted
+
     author: str | None = _extract_comment_author(entry, is_deleted=is_deleted)
-    distinguished, permalink, stickied = _extract_comment_metadata(node, entry)
+
+    node_class: str = node.attributes.get("class") or ""
+
+    distinguished: str | None = None
+    if "moderator" in node_class:
+        distinguished = "moderator"
+    elif "admin" in node_class:
+        distinguished = "admin"
+
+    stickied: bool = "stickied" in node_class
+
+    permalink_elem: Node | None = entry.css_first("a[data-event-action='permalink']")
+    permalink: str | None = (
+        permalink_elem.attributes.get("href") if permalink_elem else None
+    )
 
     return _CommentParseContext(
         comment_id=comment_id,
